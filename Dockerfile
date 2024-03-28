@@ -1,15 +1,26 @@
-FROM python:3-slim
-LABEL maintainer="Alexander Thamm GmbH <contact@alexanderthamm.com>"
+FROM python:3.8-bullseye
 
-WORKDIR /mlflow/
+WORKDIR /home/mlflow
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
-  rm requirements.txt
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    # java
+    openjdk-11-jre-headless \
+    # yarn
+    && npm install --global yarn \
+    # protoc
+    && wget https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-linux-x86_64.zip -O /tmp/protoc.zip \
+    && mkdir -p /home/mlflow/.local \
+    && unzip /tmp/protoc.zip -d /home/mlflow/.local/protoc \
+    && rm /tmp/protoc.zip \
+    && chmod -R +x /home/mlflow/.local/protoc \
+    # adding an unprivileged user
+    && groupadd --gid 10001 mlflow  \
+    && useradd --uid 10001 --gid mlflow --shell /bin/bash --create-home mlflow
 
-EXPOSE 5000
+ENV PATH="/home/mlflow/.local/protoc/bin:$PATH"
 
-ENV BACKEND_URI sqlite:////mlflow/mlflow.db
-ENV ARTIFACT_ROOT /mlflow/artifacts
+# the "mlflow" user created above, represented numerically for optimal compatibility with Kubernetes security policies
+USER 10001
 
-CMD mlflow server --backend-store-uri ${BACKEND_URI} --default-artifact-root ${ARTIFACT_ROOT} --host 0.0.0.0 --port 5000
+CMD ["bash"]
